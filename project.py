@@ -20,14 +20,26 @@ st.set_page_config(
 @st.cache_data
 def load_data(file_path):
     df = pd.read_csv(file_path)
+    
+    # Ensure 'Date' is datetime
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')  # Convert 'Date' to datetime
-    df = df.rename(columns={'Price': 'Close', 'Vol.': 'Volume', 'Change %': 'Change'})  # Rename for consistency
+    
+    # Rename columns for consistency
+    df = df.rename(columns={'Price': 'Close', 'Vol.': 'Volume', 'Change %': 'Change'})
+    
+    # Ensure numeric conversions
     df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
     df['Open'] = pd.to_numeric(df['Open'], errors='coerce')
     df['High'] = pd.to_numeric(df['High'], errors='coerce')
     df['Low'] = pd.to_numeric(df['Low'], errors='coerce')
     df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
+    
+    # Convert 'Change' to numeric, handle errors
     df['Change'] = pd.to_numeric(df['Change'], errors='coerce')
+    
+    # Handle missing 'Change' column or invalid values
+    if 'Change' not in df.columns or df['Change'].isna().all():
+        df['Change'] = ((df['Close'] - df['Open']) / df['Open']) * 100  # Example calculation
     
     # Add the decision column
     def classify_change(change):
@@ -37,14 +49,18 @@ def load_data(file_path):
             return 'Sell'
         else:
             return 'Hold'
+    
     df['Decision'] = df['Change'].apply(classify_change)
     return df
+
 
 # Sidebar for file selection
 st.sidebar.title("Options")
 predefined_files = {
     "Zain": "Zain1.csv",
-    "AlmaraiStocksData": "AlmaraiStocksData1.csv",
+    "Almarai": "AlmaraiStocksData1.csv",
+    "AlRajihi Bank": "Al-Rajhi-Bank.csv",
+    "Sasco": "Sasco-Stocks.csv"
 }
 file_selection = st.sidebar.selectbox("Choose a File", list(predefined_files.keys()))
 
@@ -53,11 +69,10 @@ data = load_data(predefined_files[file_selection])
 st.sidebar.success(f"Loaded predefined file: {file_selection}")
 
 # Navbar
-# Navbar with updated icon
 selected = option_menu(
     menu_title="CBR for Financial Investment Decision Support",
     options=["CART Algorithm", "Chart & Historical Data"],
-    icons=["graph-down-arrow", "graph-up"],  # Updated the first icon
+    icons=["graph-down-arrow", "graph-up"],
     menu_icon="menu-app",
     default_index=0,
     orientation="horizontal",
@@ -69,11 +84,11 @@ if selected == "CART Algorithm":
 
     # Sidebar inputs for prediction using sorted selectbox
     st.sidebar.subheader("Predict Decision")
-    price = st.sidebar.selectbox("Select Price", sorted(data['Close'].unique()))  # Sorted from minimum to maximum
-    open_price = st.sidebar.selectbox("Select Open Price", sorted(data['Open'].unique()))  # Sorted
-    high = st.sidebar.selectbox("Select High", sorted(data['High'].unique()))  # Sorted
-    low = st.sidebar.selectbox("Select Low", sorted(data['Low'].unique()))  # Sorted
-    volume = st.sidebar.selectbox("Select Volume", sorted(data['Volume'].unique()))  # Sorted
+    price = st.sidebar.selectbox("Select Price", sorted(data['Close'].unique()))
+    open_price = st.sidebar.selectbox("Select Open Price", sorted(data['Open'].unique()))
+    high = st.sidebar.selectbox("Select High", sorted(data['High'].unique()))
+    low = st.sidebar.selectbox("Select Low", sorted(data['Low'].unique()))
+    volume = st.sidebar.selectbox("Select Volume", sorted(data['Volume'].unique()))
     submit = st.sidebar.button("Submit")
 
     # Preprocess the dataset
@@ -116,56 +131,54 @@ if selected == "CART Algorithm":
                 f"<h2 style='text-align: center; color: yellow;'>The suggested action is: <b>{prediction.upper()}</b></h2>",
                 unsafe_allow_html=True
             )
+        
+        # Safeguard for missing labels
+        def safe_get_metric(report, label, metric):
+            return report.get(label, {}).get(metric, 0.0)
 
-        # Display classification metrics
         st.subheader("Classification Metrics")
-
-        # First row: "Buy", "Hold", "Sell" metrics
         col1, col2, col3 = st.columns(3)
         with col1:
             st.markdown("### Buy")
-            st.write(f"Precision: {report_dict['Buy']['precision']:.2f}")
-            st.write(f"Recall: {report_dict['Buy']['recall']:.2f}")
-            st.write(f"F1-Score: {report_dict['Buy']['f1-score']:.2f}")
-            st.write(f"Support: {int(report_dict['Buy']['support'])}")
+            st.write(f"Precision: {safe_get_metric(report_dict, 'Buy', 'precision'):.2f}")
+            st.write(f"Recall: {safe_get_metric(report_dict, 'Buy', 'recall'):.2f}")
+            st.write(f"F1-Score: {safe_get_metric(report_dict, 'Buy', 'f1-score'):.2f}")
+            st.write(f"Support: {safe_get_metric(report_dict, 'Buy', 'support'):.0f}")
         with col2:
             st.markdown("### Hold")
-            st.write(f"Precision: {report_dict['Hold']['precision']:.2f}")
-            st.write(f"Recall: {report_dict['Hold']['recall']:.2f}")
-            st.write(f"F1-Score: {report_dict['Hold']['f1-score']:.2f}")
-            st.write(f"Support: {int(report_dict['Hold']['support'])}")
+            st.write(f"Precision: {safe_get_metric(report_dict, 'Hold', 'precision'):.2f}")
+            st.write(f"Recall: {safe_get_metric(report_dict, 'Hold', 'recall'):.2f}")
+            st.write(f"F1-Score: {safe_get_metric(report_dict, 'Hold', 'f1-score'):.2f}")
+            st.write(f"Support: {safe_get_metric(report_dict, 'Hold', 'support'):.0f}")
         with col3:
             st.markdown("### Sell")
-            st.write(f"Precision: {report_dict['Sell']['precision']:.2f}")
-            st.write(f"Recall: {report_dict['Sell']['recall']:.2f}")
-            st.write(f"F1-Score: {report_dict['Sell']['f1-score']:.2f}")
-            st.write(f"Support: {int(report_dict['Sell']['support'])}")
+            st.write(f"Precision: {safe_get_metric(report_dict, 'Sell', 'precision'):.2f}")
+            st.write(f"Recall: {safe_get_metric(report_dict, 'Sell', 'recall'):.2f}")
+            st.write(f"F1-Score: {safe_get_metric(report_dict, 'Sell', 'f1-score'):.2f}")
+            st.write(f"Support: {safe_get_metric(report_dict, 'Sell', 'support'):.0f}")
 
-        # Second row: Accuracy and Averages
+        # Display accuracy and overall metrics
         st.subheader("Overall Metrics")
         col4, col5, col6 = st.columns(3)
         with col4:
             st.markdown("### Accuracy")
             st.write(f"{accuracy:.2f}")
-            st.write(f"Support: 0")  # Assuming support for accuracy is missing
         with col5:
             st.markdown("### Macro Avg")
-            st.write(f"Precision: {report_dict['macro avg']['precision']:.2f}")
-            st.write(f"Recall: {report_dict['macro avg']['recall']:.2f}")
-            st.write(f"F1-Score: {report_dict['macro avg']['f1-score']:.2f}")
-            st.write(f"Support: {int(report_dict['macro avg']['support'])}")
+            st.write(f"Precision: {safe_get_metric(report_dict, 'macro avg', 'precision'):.2f}")
+            st.write(f"Recall: {safe_get_metric(report_dict, 'macro avg', 'recall'):.2f}")
+            st.write(f"F1-Score: {safe_get_metric(report_dict, 'macro avg', 'f1-score'):.2f}")
         with col6:
             st.markdown("### Weighted Avg")
-            st.write(f"Precision: {report_dict['weighted avg']['precision']:.2f}")
-            st.write(f"Recall: {report_dict['weighted avg']['recall']:.2f}")
-            st.write(f"F1-Score: {report_dict['weighted avg']['f1-score']:.2f}")
+            st.write(f"Precision: {safe_get_metric(report_dict, 'weighted avg', 'precision'):.2f}")
+            st.write(f"Recall: {safe_get_metric(report_dict, 'weighted avg', 'recall'):.2f}")
+            st.write(f"F1-Score: {safe_get_metric(report_dict, 'weighted avg', 'f1-score'):.2f}")
 
-        # Visualize decision tree at the bottom
+        # Visualize decision tree
         st.subheader("Decision Tree Visualization")
         fig, ax = plt.subplots(figsize=(20, 10))
         plot_tree(cart_model, feature_names=X.columns, class_names=cart_model.classes_, filled=True, ax=ax)
         st.pyplot(fig)
-
 
 # Page 2: Chart & Historical Data
 elif selected == "Chart & Historical Data":
